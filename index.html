@@ -22,7 +22,7 @@
 
 <div class="container">
     <h1>📚 Libby to Clippings Converter</h1>
-    <p>Upload your Libby JSON file here. This tool will automatically convert it into the Kindle <code>My Clippings.txt</code> format, which you can easily upload directly to <strong>Clippings.io</strong>.</p>
+    <p>Upload your Libby JSON file here. This tool will automatically convert it into the Kindle <code>My Clippings.txt</code> format (sorted from earliest to latest), which you can easily upload directly to <strong>Clippings.io</strong>.</p>
     
     <div class="upload-area">
         <input type="file" id="fileInput" accept=".json">
@@ -52,6 +52,10 @@
                 let output = "";
 
                 if (data.highlights && Array.isArray(data.highlights)) {
+                    
+                    // NEW CODE: Sort highlights by timestamp in ascending order (earliest first)
+                    data.highlights.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
                     data.highlights.forEach(hl => {
                         // Format the Libby timestamp to match the Kindle standard dates
                         const date = new Date(hl.timestamp).toLocaleString('en-US', {
