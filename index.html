@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Libby to Clippings Converter</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; background-color: #f4f4f9; color: #333; }
+        .container { background: #fff; padding: 30px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        h1 { margin-top: 0; color: #2c3e50; }
+        p { color: #666; line-height: 1.5; }
+        .upload-area { margin: 20px 0; padding: 20px; border: 2px dashed #3498db; border-radius: 8px; text-align: center; background-color: #fbfbfc; transition: background 0.2s; }
+        .upload-area:hover { background-color: #f1f8ff; }
+        input[type="file"] { cursor: pointer; }
+        textarea { width: 100%; height: 300px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; font-family: monospace; font-size: 14px; box-sizing: border-box; resize: vertical; margin-bottom: 20px; background-color: #fafafa; }
+        button { background-color: #3498db; color: #fff; border: none; padding: 12px 24px; font-size: 16px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: background 0.3s; }
+        button:hover { background-color: #2980b9; }
+        button:disabled { background-color: #bdc3c7; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>📚 Libby to Clippings Converter</h1>
+    <p>Upload your Libby JSON file here. This tool will automatically convert it into the Kindle <code>My Clippings.txt</code> format, which you can easily upload directly to <strong>Clippings.io</strong>.</p>
+    
+    <div class="upload-area">
+        <input type="file" id="fileInput" accept=".json">
+    </div>
+
+    <textarea id="output" placeholder="Your converted clippings will appear here..." readonly></textarea>
+    
+    <button id="downloadBtn" disabled>Download .txt File</button>
+</div>
+
+<script>
+    let currentFileName = "My Clippings.txt";
+
+    document.getElementById('fileInput').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        // Auto-name the exported text file based on the uploaded JSON file
+        currentFileName = file.name.replace('.json', '_clippings.txt');
+        
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            try {
+                const data = JSON.parse(event.target.result);
+                const title = data.readingJourney?.title?.text || "Unknown Title";
+                const author = data.readingJourney?.author || "Unknown Author";
+                let output = "";
+
+                if (data.highlights && Array.isArray(data.highlights)) {
+                    data.highlights.forEach(hl => {
+                        // Format the Libby timestamp to match the Kindle standard dates
+                        const date = new Date(hl.timestamp).toLocaleString('en-US', {
+                            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+                            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
+                        });
+                        
+                        const locationStr = hl.chapter ? `Chapter: ${hl.chapter}` : `Percent: ${Math.round(hl.percent * 100)}%`;
+                        
+                        // Add quote if it exists
+                        if (hl.quote) {
+                            output += `${title} (${author})\n`;
+                            output += `- Your Highlight on ${locationStr} | Added on ${date}\n\n`;
+                            output += `${hl.quote}\n`;
+                            output += `==========\n`;
+                        }
+                        
+                        // Add typed note if the user added one in Libby
+                        if (hl.note) {
+                            output += `${title} (${author})\n`;
+                            output += `- Your Note on ${locationStr} | Added on ${date}\n\n`;
+                            output += `${hl.note}\n`;
+                            output += `==========\n`;
+                        }
+                    });
+                    
+                    document.getElementById('output').value = output;
+                    document.getElementById('downloadBtn').disabled = false;
+                } else {
+                    alert("No highlights found in this JSON file.");
+                }
+            } catch (err) {
+                alert("Error parsing JSON file. Please ensure it's a valid Libby export.");
+                console.error(err);
+            }
+        };
+        reader.readAsText(file);
+    });
+
+    // Trigger the actual .txt file download
+    document.getElementById('downloadBtn').addEventListener('click', function() {
+        const text = document.getElementById('output').value;
+        const blob = new Blob([text], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = currentFileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    });
+</script>
+
+</body>
+</html>
