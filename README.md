@@ -28,7 +28,7 @@ This tool is perfect for readers who want to import their Libby notes into servi
 🚀 How to Use
 Open the Libby app and export your reading highlights as a JSON file.
 
-Go to the live converter website: https://[your-username].github.io/libby-to-clippings/ (Replace with your actual GitHub Pages link!)
+Go to the live converter website: https://etonchau.github.io/libby-to-clippings/
 
 Click the upload box and select your exported .json file.
 
