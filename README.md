@@ -2,7 +2,7 @@
 
 A simple, fast, and completely private browser-based tool that converts Libby reading highlights (JSON) into the classic Kindle My Clippings.txt format.
 
-This tool is perfect for readers who want to import their Libby notes into services like Clippings.io or personal knowledge management apps (like Notion or Obsidian) without manually reformatting everything.
+This tool is perfect for readers who want to import their Libby notes into services like Clippings.io or personal knowledge management apps (like Notion or Obsidian) without manually re-formatting everything. 
 
 -----------------
 
