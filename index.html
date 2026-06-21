@@ -22,14 +22,14 @@
 <body>
 
 <div class="container">
-    <h1>📚 Libby to Clippings Converter <span class="badge">Chronological Sort ON</span></h1>
-    <p>Upload your Libby JSON file here. This tool will automatically convert it into the Kindle <code>My Clippings.txt</code> format, explicitly sorted from your <strong>earliest highlight to your latest</strong>.</p>
+    <h1>📚 Libby to Clippings Converter <span class="badge">Chronological & Clean</span></h1>
+    <p>Upload your Libby JSON file here. This tool will automatically convert it into a streamlined text format, strictly sorted from your <strong>earliest highlight to your latest</strong>, with notes attached directly below the quotes and separated by two blank lines.</p>
     
     <div class="upload-area">
         <input type="file" id="fileInput" accept=".json">
     </div>
 
-    <textarea id="output" placeholder="Your chronological clippings will appear here..." readonly></textarea>
+    <textarea id="output" placeholder="Your formatted clippings will appear here..." readonly></textarea>
     
     <button id="downloadBtn" disabled>Download .txt File</button>
 </div>
@@ -53,7 +53,7 @@
 
                 if (data.highlights && Array.isArray(data.highlights)) {
                     
-                    // Force a strict chronological sort (earliest date first) into a new array
+                    // Force a strict chronological sort (earliest date first)
                     const chronologicalHighlights = [...data.highlights].sort((a, b) => {
                         const timeA = a.timestamp || 0;
                         const timeB = b.timestamp || 0;
@@ -63,29 +63,36 @@
                     chronologicalHighlights.forEach(hl => {
                         const d = new Date(hl.timestamp);
                         
-                        // Strict Kindle Date Formatting (e.g., Sunday, June 21, 2026 1:13:19 PM)
+                        // Strict Kindle Date Formatting
                         const dateStr = d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
                         const timeStr = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true });
                         const formattedDate = `${dateStr} ${timeStr}`;
                         
                         const locationStr = hl.chapter ? `Chapter: ${hl.chapter}` : `Percent: ${Math.round(hl.percent * 100)}%`;
                         
-                        if (hl.quote) {
+                        // Only process if there is a quote or a note
+                        if (hl.quote || hl.note) {
                             output += `${title} (${author})\n`;
-                            output += `- Your Highlight on ${locationStr} | Added on ${formattedDate}\n\n`;
-                            output += `${hl.quote}\n`;
-                            output += `==========\n`;
-                        }
-                        
-                        if (hl.note) {
-                            output += `${title} (${author})\n`;
-                            output += `- Your Note on ${locationStr} | Added on ${formattedDate}\n\n`;
-                            output += `${hl.note}\n`;
-                            output += `==========\n`;
+                            
+                            const actionStr = hl.quote ? "Highlight" : "Note";
+                            output += `- Your ${actionStr} on ${locationStr} | Added on ${formattedDate}\n`;
+                            
+                            // Print Quote without an extra space above it
+                            if (hl.quote) {
+                                output += `${hl.quote}\n`;
+                            }
+                            
+                            // Attach Note directly beneath the quote
+                            if (hl.note) {
+                                output += `Note:\n${hl.note}\n`;
+                            }
+                            
+                            // Add TWO blank lines (triple return) to separate this entry from the next one
+                            output += `\n\n`;
                         }
                     });
                     
-                    document.getElementById('output').value = output;
+                    document.getElementById('output').value = output.trim();
                     document.getElementById('downloadBtn').disabled = false;
                 } else {
                     alert("No highlights found in this JSON file.");
