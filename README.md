@@ -1,7 +1,42 @@
-# libby-to-clippings
+# Libby to Kindle Clippings Converter
 
-libby-to-clippings
+A simple, fast, and completely private browser-based tool that converts Libby reading highlights (JSON) into the classic Kindle My Clippings.txt format.
 
-So it's a converter for Libby highlight exporting (Json) and convert to Kindle format(txt) whilst only keeping the necessary information(Title/Chapter/Author/highlight added date&time) that sorted by time. 
+This tool is perfect for readers who want to import their Libby notes into services like Clippings.io or personal knowledge management apps (like Notion or Obsidian) without manually reformatting everything.
 
-Enjoy
+✨ Features
+- Instant Conversion: Transforms Libby's raw JSON export into a clean, highly readable .txt file.
+
+- Chronological Sorting: Automatically sorts your highlights from your earliest note to your latest, allowing you to review your highlights exactly as you progressed through the book.
+
+- Decluttered Data: Strips away all the unnecessary code and strictly preserves only the essential reading information:
+
+- Book Title
+
+- Author
+
+- Chapter (or Progress Percentage)
+
+- Date & Time the highlight was added
+
+- The Highlight and/or Custom Note
+
+- 100% Private & Local: This tool runs entirely in your local web browser. Your reading data, highlights, and notes are processed directly on your device and are never uploaded, tracked, or stored on any external servers.
+-----------------
+🚀 How to Use
+Open the Libby app and export your reading highlights as a JSON file.
+
+Go to the live converter website: https://[your-username].github.io/libby-to-clippings/ (Replace with your actual GitHub Pages link!)
+
+Click the upload box and select your exported .json file.
+
+Click Download .txt File.
+
+Upload your newly formatted text file to Clippings.io or your favorite note-taking app!
+----------
+🛠️ Built With
+Standard HTML, CSS, and vanilla JavaScript.
+
+Hosted entirely for free via GitHub Pages.
+
+Shout out to Gemini :)
