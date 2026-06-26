@@ -22,14 +22,14 @@
 <body>
 
 <div class="container">
-    <h1>📚 Universal Clippings Converter <span class="badge">Clean Layout</span></h1>
-    <p>Upload your <strong>Libby JSON</strong> or <strong>Kindle TXT</strong> file here. This tool will automatically standardize, strictly sort by time, and output a minimalist format with zero dividers.</p>
+    <h1>📚 Universal Clippings Converter <span class="badge">Libby + Kindle + KOReader</span></h1>
+    <p>Upload your <strong>Libby JSON</strong> or <strong>Kindle/KOReader TXT</strong> file. The tool automatically merges overlapping notes, standardizes dates, and outputs a minimalist format.</p>
     
     <div class="upload-area">
         <input type="file" id="fileInput" accept=".json, .txt">
     </div>
 
-    <textarea id="output" placeholder="Your formatted, chronological clippings will appear here..." readonly></textarea>
+    <textarea id="output" placeholder="Your minimalist, chronological clippings will appear here..." readonly></textarea>
     
     <button id="downloadBtn" disabled>Download .txt File</button>
 </div>
@@ -38,20 +38,18 @@
     let currentFileName = "My Clippings.txt";
 
     function formatKindleDate(timestamp) {
+        if (!timestamp || isNaN(timestamp)) return "Unknown Date";
         const d = new Date(timestamp);
-        if (isNaN(d.getTime())) return "Unknown Date";
-        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-        const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-        
-        const pad = (num) => num.toString().padStart(2, '0');
-        return `${days[d.getDay()]}, ${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+        const dateStr = d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        const timeStr = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true });
+        return `${dateStr} ${timeStr}`;
     }
 
     document.getElementById('fileInput').addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
         
-        currentFileName = file.name.replace(/\.[^/.]+$/, "") + '_formatted.txt';
+        currentFileName = file.name.replace(/\.[^/.]+$/, "") + '_clean.txt';
         const isJson = file.name.toLowerCase().endsWith('.json');
         
         const reader = new FileReader();
@@ -61,6 +59,7 @@
 
             try {
                 if (isJson) {
+                    // --- PARSE LIBBY JSON ---
                     const data = JSON.parse(fileContent);
                     const title = data.readingJourney?.title?.text || "Unknown Title";
                     const author = data.readingJourney?.author || "Unknown Author";
@@ -69,62 +68,131 @@
                     if (data.highlights && Array.isArray(data.highlights)) {
                         data.highlights.forEach(hl => {
                             if (hl.quote || hl.note) {
-                                // Formatting the AM/PM time exactly like your screenshot
-                                const d = new Date(hl.timestamp);
-                                const dateStr = d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-                                const timeStr = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true });
-                                const formattedDate = `${dateStr} ${timeStr}`;
-
+                                const formattedDate = formatKindleDate(hl.timestamp);
                                 const locationStr = hl.chapter ? `Chapter: ${hl.chapter}` : `Percent: ${Math.round(hl.percent * 100)}%`;
                                 const actionStr = hl.quote ? "Highlight" : "Note";
                                 
                                 let contentStr = "";
-                                if (hl.quote) contentStr += hl.quote + "\n";
-                                if (hl.note) contentStr += (hl.quote ? "Note:\n" : "Note:\n") + hl.note + "\n";
+                                if (hl.quote) contentStr += hl.quote;
+                                if (hl.note) contentStr += (contentStr ? "\nNote:\n" : "Note:\n") + hl.note;
                                 
                                 parsedItems.push({
                                     titleAuthor: titleAuthor,
                                     meta: `- Your ${actionStr} on ${locationStr} | Added on ${formattedDate}`,
                                     content: contentStr.trim(),
-                                    timestamp: hl.timestamp || 0
+                                    timestamp: hl.timestamp || 0,
+                                    isNote: false, // Libby items are already pre-combined
+                                    loc: locationStr
                                 });
                             }
                         });
-                    } else {
-                        throw new Error("No highlights found in JSON.");
                     }
 
                 } else {
-                    const blocks = fileContent.split('==========');
-                    blocks.forEach(block => {
-                        const lines = block.trim().split('\n').map(l => l.trim());
-                        if (lines.length < 3) return;
-                        
-                        const titleAuthor = lines[0];
-                        const meta = lines[1];
-                        
-                        let timestamp = 0;
-                        const dateMatch = meta.split('| Added on ');
-                        if (dateMatch.length > 1) {
-                            timestamp = new Date(dateMatch[1]).getTime();
-                        }
+                    // --- PARSE TXT (KINDLE OR KOREADER) ---
+                    if (fileContent.includes("==========")) {
+                        // Standard Kindle TXT Parser
+                        const blocks = fileContent.split('==========');
+                        blocks.forEach(block => {
+                            const lines = block.trim().split('\n').map(l => l.trim());
+                            if (lines.length < 3) return;
+                            
+                            const titleAuthor = lines[0];
+                            const meta = lines[1];
+                            
+                            let timestamp = 0;
+                            const dateMatch = meta.split('| Added on ');
+                            if (dateMatch.length > 1) timestamp = new Date(dateMatch[1]).getTime();
 
-                        const contentStartIndex = lines[2] === "" ? 3 : 2;
-                        const content = lines.slice(contentStartIndex).join('\n');
+                            const contentStartIndex = lines[2] === "" ? 3 : 2;
+                            const content = lines.slice(contentStartIndex).join('\n').trim();
 
-                        parsedItems.push({
-                            titleAuthor: titleAuthor,
-                            meta: meta,
-                            content: content,
-                            timestamp: isNaN(timestamp) ? 0 : timestamp
+                            let isNote = meta.includes("- Your Note");
+                            let loc = "Unknown";
+                            let locMatch = meta.match(/(?:at location|on Chapter:)\s+([^ |]+)/);
+                            if (locMatch) loc = locMatch[1].split('-')[0]; // Simplify range to base location
+
+                            parsedItems.push({ titleAuthor, meta, content, timestamp: isNaN(timestamp) ? 0 : timestamp, isNote, loc });
                         });
-                    });
+                    } else {
+                        // KOReader / Calibre TXT Parser
+                        const lines = fileContent.split(/\r?\n/);
+                        let titleAuthor = lines[0].trim();
+                        let currentChapter = "Unknown";
+                        
+                        for (let i = 1; i < lines.length; i++) {
+                            let line = lines[i].trim();
+                            if (!line) continue;
+                            
+                            if (line.startsWith("Chapter: ")) {
+                                currentChapter = line.substring(9).trim();
+                            } else if (/^\d+\.\s+Highlight\s+-/.test(line)) {
+                                let match = line.match(/^\d+\.\s+Highlight\s+-\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})(.*)/);
+                                let dateStr = match ? match[1] : "";
+                                let restOfLine = match ? match[2] : "";
+
+                                let content = restOfLine.trim();
+                                let j = i + 1;
+                                while(j < lines.length && !lines[j].trim().startsWith("Chapter: ") && !/^\d+\.\s+Highlight\s+-/.test(lines[j].trim())) {
+                                    if (lines[j].trim()) content += "\n" + lines[j].trim();
+                                    j++;
+                                }
+                                i = j - 1; // skip processed lines
+
+                                // Extract Note from Quote
+                                let quote = content;
+                                let note = "";
+                                let noteMatch = content.match(/Note:\s*([\s\S]*)$/);
+                                if (noteMatch) {
+                                    note = noteMatch[1].trim();
+                                    quote = content.substring(0, noteMatch.index).trim();
+                                }
+                                
+                                // Ignore empty auto-generated notes from KOReader
+                                if (note.toLowerCase() === "no notes") note = "";
+
+                                let timestamp = dateStr ? new Date(dateStr.replace(" ", "T")).getTime() : 0;
+                                let meta = `- Your Highlight on Chapter: ${currentChapter} | Added on ${formatKindleDate(timestamp)}`;
+                                
+                                let finalContent = quote;
+                                if (note) finalContent += (finalContent ? "\nNote:\n" : "Note:\n") + note;
+
+                                parsedItems.push({
+                                    titleAuthor: titleAuthor,
+                                    meta: meta,
+                                    content: finalContent.trim(),
+                                    timestamp: timestamp,
+                                    isNote: false, // Already combined
+                                    loc: currentChapter
+                                });
+                            }
+                        }
+                    }
                 }
 
+                // --- SORT & MERGE PHASE ---
+                // 1. Sort strictly by timestamp
                 parsedItems.sort((a, b) => a.timestamp - b.timestamp);
 
+                // 2. Merge Kindle Notes into their corresponding Highlights
+                let mergedItems = [];
+                parsedItems.forEach(item => {
+                    if (item.isNote) {
+                        let prev = mergedItems[mergedItems.length - 1];
+                        // If the previous item is a Highlight from the same book at the same location, fuse them!
+                        if (prev && prev.titleAuthor === item.titleAuthor && prev.loc === item.loc && !prev.isNote) {
+                            if (item.content) {
+                                prev.content += "\nNote:\n" + item.content;
+                            }
+                            return; // Don't push this note as a separate item
+                        }
+                    }
+                    mergedItems.push(item);
+                });
+
+                // --- FINAL OUTPUT GENERATION ---
                 let finalOutput = "";
-                parsedItems.forEach((item, index) => {
+                mergedItems.forEach((item, index) => {
                     finalOutput += `${item.titleAuthor}\n`;
                     finalOutput += `${item.meta}\n`; 
                     if (item.content) {
@@ -132,12 +200,12 @@
                     }
                     
                     // Add exactly ONE blank line to separate entries
-                    if (index < parsedItems.length - 1) {
+                    if (index < mergedItems.length - 1) {
                         finalOutput += `\n`;
                     }
                 });
                 
-                if (parsedItems.length > 0) {
+                if (mergedItems.length > 0) {
                     document.getElementById('output').value = finalOutput;
                     document.getElementById('downloadBtn').disabled = false;
                 } else {
@@ -145,7 +213,7 @@
                 }
 
             } catch (err) {
-                alert("Error processing file. Please ensure it's a valid Libby JSON or Kindle TXT export.");
+                alert("Error processing file. Please ensure it's a valid Libby, Kindle, or KOReader export.");
                 console.error(err);
             }
         };
