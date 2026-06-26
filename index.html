@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Libby to Clippings Converter</title>
+    <title>Universal Clippings Converter</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; background-color: #f4f4f9; color: #333; }
         .container { background: #fff; padding: 30px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
@@ -22,14 +22,15 @@
 <body>
 
 <div class="container">
-    <h1>📚 Libby to Clippings Converter <span class="badge">Chronological & Clean</span></h1>
-    <p>Upload your Libby JSON file here. This tool will automatically convert it into a streamlined text format, strictly sorted from your <strong>earliest highlight to your latest</strong>, with notes attached directly below the quotes and separated by two blank lines.</p>
+    <h1>📚 Universal Clippings Converter <span class="badge">Libby + Kindle</span></h1>
+    <p>Upload your <strong>Libby JSON</strong> or <strong>Kindle TXT</strong> file here. This tool will automatically standardize, strictly sort by time, and format everything to match the classic Kindle layout seamlessly.</p>
     
     <div class="upload-area">
-        <input type="file" id="fileInput" accept=".json">
+        <!-- Now accepts both JSON and TXT -->
+        <input type="file" id="fileInput" accept=".json, .txt">
     </div>
 
-    <textarea id="output" placeholder="Your formatted clippings will appear here..." readonly></textarea>
+    <textarea id="output" placeholder="Your formatted, chronological clippings will appear here..." readonly></textarea>
     
     <button id="downloadBtn" disabled>Download .txt File</button>
 </div>
@@ -37,68 +38,113 @@
 <script>
     let currentFileName = "My Clippings.txt";
 
+    // Helper function to format dates exactly like the user's Kindle (Thursday, 17 April 2025 21:56:23)
+    function formatKindleDate(timestamp) {
+        const d = new Date(timestamp);
+        if (isNaN(d.getTime())) return "Unknown Date";
+        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        
+        const pad = (num) => num.toString().padStart(2, '0');
+        return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+
     document.getElementById('fileInput').addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
         
-        currentFileName = file.name.replace('.json', '_clippings.txt');
+        currentFileName = file.name.replace(/\.[^/.]+$/, "") + '_formatted.txt';
+        const isJson = file.name.toLowerCase().endsWith('.json');
         
         const reader = new FileReader();
         reader.onload = function(event) {
+            const fileContent = event.target.result;
+            let parsedItems = [];
+
             try {
-                const data = JSON.parse(event.target.result);
-                const title = data.readingJourney?.title?.text || "Unknown Title";
-                const author = data.readingJourney?.author || "Unknown Author";
-                let output = "";
+                if (isJson) {
+                    // --- PARSE LIBBY JSON ---
+                    const data = JSON.parse(fileContent);
+                    const title = data.readingJourney?.title?.text || "Unknown Title";
+                    const author = data.readingJourney?.author || "Unknown Author";
+                    const titleAuthor = `${title} (${author})`;
 
-                if (data.highlights && Array.isArray(data.highlights)) {
-                    
-                    // Force a strict chronological sort (earliest date first)
-                    const chronologicalHighlights = [...data.highlights].sort((a, b) => {
-                        const timeA = a.timestamp || 0;
-                        const timeB = b.timestamp || 0;
-                        return timeA - timeB; 
-                    });
+                    if (data.highlights && Array.isArray(data.highlights)) {
+                        data.highlights.forEach(hl => {
+                            if (hl.quote || hl.note) {
+                                const formattedDate = formatKindleDate(hl.timestamp);
+                                const locationStr = hl.chapter ? `Chapter: ${hl.chapter}` : `Percent: ${Math.round(hl.percent * 100)}%`;
+                                const actionStr = hl.quote ? "Highlight" : "Note";
+                                
+                                let contentStr = "";
+                                if (hl.quote) contentStr += hl.quote + "\n";
+                                if (hl.note) contentStr += (hl.quote ? "Note:\n" : "") + hl.note + "\n";
+                                
+                                parsedItems.push({
+                                    titleAuthor: titleAuthor,
+                                    meta: `- Your ${actionStr} on ${locationStr} | Added on ${formattedDate}`,
+                                    content: contentStr.trim(),
+                                    timestamp: hl.timestamp || 0
+                                });
+                            }
+                        });
+                    } else {
+                        throw new Error("No highlights found in JSON.");
+                    }
 
-                    chronologicalHighlights.forEach(hl => {
-                        const d = new Date(hl.timestamp);
+                } else {
+                    // --- PARSE KINDLE TXT ---
+                    const blocks = fileContent.split('==========');
+                    blocks.forEach(block => {
+                        const lines = block.trim().split('\n').map(l => l.trim());
+                        if (lines.length < 3) return; // Ignore empty/invalid blocks
                         
-                        // Strict Kindle Date Formatting
-                        const dateStr = d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-                        const timeStr = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true });
-                        const formattedDate = `${dateStr} ${timeStr}`;
+                        const titleAuthor = lines[0];
+                        const meta = lines[1];
                         
-                        const locationStr = hl.chapter ? `Chapter: ${hl.chapter}` : `Percent: ${Math.round(hl.percent * 100)}%`;
-                        
-                        // Only process if there is a quote or a note
-                        if (hl.quote || hl.note) {
-                            output += `${title} (${author})\n`;
-                            
-                            const actionStr = hl.quote ? "Highlight" : "Note";
-                            output += `- Your ${actionStr} on ${locationStr} | Added on ${formattedDate}\n`;
-                            
-                            // Print Quote without an extra space above it
-                            if (hl.quote) {
-                                output += `${hl.quote}\n`;
-                            }
-                            
-                            // Attach Note directly beneath the quote
-                            if (hl.note) {
-                                output += `Note:\n${hl.note}\n`;
-                            }
-                            
-                            // Add TWO blank lines (triple return) to separate this entry from the next one
-                            output += `\n\n`;
+                        // Extract timestamp for sorting
+                        let timestamp = 0;
+                        const dateMatch = meta.split('| Added on ');
+                        if (dateMatch.length > 1) {
+                            timestamp = new Date(dateMatch[1]).getTime();
                         }
+
+                        // The content usually starts after a blank line
+                        const contentStartIndex = lines[2] === "" ? 3 : 2;
+                        const content = lines.slice(contentStartIndex).join('\n');
+
+                        parsedItems.push({
+                            titleAuthor: titleAuthor,
+                            meta: meta,
+                            content: content,
+                            timestamp: isNaN(timestamp) ? 0 : timestamp
+                        });
                     });
-                    
-                    document.getElementById('output').value = output.trim();
+                }
+
+                // --- SORT AND GENERATE UNIFIED OUTPUT ---
+                // Sort chronologically (earliest first)
+                parsedItems.sort((a, b) => a.timestamp - b.timestamp);
+
+                let finalOutput = "";
+                parsedItems.forEach(item => {
+                    finalOutput += `${item.titleAuthor}\n`;
+                    finalOutput += `${item.meta}\n\n`; // Exact match to Kindle: One blank line before quote
+                    if (item.content) {
+                        finalOutput += `${item.content}\n`;
+                    }
+                    finalOutput += `==========\n`; // Exact match to Kindle: No trailing blank lines after the separator
+                });
+                
+                if (parsedItems.length > 0) {
+                    document.getElementById('output').value = finalOutput;
                     document.getElementById('downloadBtn').disabled = false;
                 } else {
-                    alert("No highlights found in this JSON file.");
+                    alert("No valid clippings found in this file.");
                 }
+
             } catch (err) {
-                alert("Error parsing JSON file. Please ensure it's a valid Libby export.");
+                alert("Error processing file. Please ensure it's a valid Libby JSON or Kindle TXT export.");
                 console.error(err);
             }
         };
