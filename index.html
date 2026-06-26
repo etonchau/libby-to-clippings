@@ -45,6 +45,15 @@
         return `${dateStr} ${timeStr}`;
     }
 
+    // Helper to check if location ranges overlap (e.g., "872-873" and "873")
+    function locationsOverlap(loc1, loc2) {
+        if (!loc1 || !loc2) return false;
+        if (loc1 === loc2) return true;
+        const parts1 = loc1.toString().split('-');
+        const parts2 = loc2.toString().split('-');
+        return parts1.some(p => parts2.includes(p));
+    }
+
     document.getElementById('fileInput').addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
@@ -54,7 +63,6 @@
         
         const reader = new FileReader();
         reader.onload = function(event) {
-            // FIX: Normalize hidden KOReader line separators (U+2028) and weird carriage returns into standard \n
             const rawContent = event.target.result;
             const fileContent = rawContent.replace(/\r\n/g, '\n').replace(/[\r\u2028\u2029]/g, '\n');
             
@@ -112,8 +120,10 @@
 
                             let isNote = meta.includes("- Your Note");
                             let loc = "Unknown";
+                            
+                            // Capture the full location range (e.g., "872-873" instead of just "872")
                             let locMatch = meta.match(/(?:at location|on Chapter:)\s+([^ |]+)/);
-                            if (locMatch) loc = locMatch[1].split('-')[0];
+                            if (locMatch) loc = locMatch[1];
 
                             parsedItems.push({ titleAuthor, meta, content, timestamp: isNaN(timestamp) ? 0 : timestamp, isNote, loc });
                         });
@@ -121,7 +131,6 @@
                         // KOReader TXT Parser
                         const lines = fileContent.split('\n');
                         
-                        // Robust Title Extraction
                         let titleAuthor = "Unknown Title";
                         for (let l of lines) {
                             if (l.trim()) {
@@ -146,14 +155,12 @@
                                 let content = restOfLine.trim();
                                 let j = i + 1;
                                 
-                                // Gather all text until the next Chapter or Highlight marker
                                 while(j < lines.length && !lines[j].trim().startsWith("Chapter: ") && !/^\d+\.\s+Highlight\s+-/.test(lines[j].trim())) {
                                     if (lines[j].trim()) content += "\n" + lines[j].trim();
                                     j++;
                                 }
-                                i = j - 1; // skip processed lines
+                                i = j - 1; 
 
-                                // Extract Note from Quote
                                 let quote = content;
                                 let note = "";
                                 let noteMatch = content.match(/Note:\s*([\s\S]*)$/);
@@ -162,7 +169,6 @@
                                     quote = content.substring(0, noteMatch.index).trim();
                                 }
                                 
-                                // Ignore empty auto-generated notes
                                 if (note.toLowerCase() === "no notes") note = "";
 
                                 let timestamp = dateStr ? new Date(dateStr.replace(" ", "T")).getTime() : 0;
@@ -191,7 +197,8 @@
                 parsedItems.forEach(item => {
                     if (item.isNote) {
                         let prev = mergedItems[mergedItems.length - 1];
-                        if (prev && prev.titleAuthor === item.titleAuthor && prev.loc === item.loc && !prev.isNote) {
+                        // FIXED: Now properly checks if ranges overlap (e.g., "872-873" overlaps with "873")
+                        if (prev && prev.titleAuthor === item.titleAuthor && locationsOverlap(prev.loc, item.loc) && !prev.isNote) {
                             if (item.content) {
                                 prev.content += "\nNote:\n" + item.content;
                             }
