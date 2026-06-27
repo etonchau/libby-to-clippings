@@ -12,6 +12,8 @@
         .upload-area { margin: 20px 0; padding: 20px; border: 2px dashed #3498db; border-radius: 8px; text-align: center; background-color: #fbfbfc; transition: background 0.2s; }
         .upload-area:hover { background-color: #f1f8ff; }
         input[type="file"] { cursor: pointer; }
+        .options-bar { margin-bottom: 15px; padding: 10px; background-color: #f1f8ff; border-radius: 6px; border: 1px solid #d6e9f8; }
+        .options-bar label { cursor: pointer; font-weight: bold; color: #2980b9; display: flex; align-items: center; gap: 8px; }
         textarea { width: 100%; height: 300px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; font-family: monospace; font-size: 14px; box-sizing: border-box; resize: vertical; margin-bottom: 20px; background-color: #fafafa; }
         button { background-color: #3498db; color: #fff; border: none; padding: 12px 24px; font-size: 16px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: background 0.3s; }
         button:hover { background-color: #2980b9; }
@@ -29,6 +31,13 @@
         <input type="file" id="fileInput" accept=".json, .txt">
     </div>
 
+    <div class="options-bar">
+        <label>
+            <input type="checkbox" id="removeTitleToggle"> 
+            Remove Book Titles and Authors from output
+        </label>
+    </div>
+
     <textarea id="output" placeholder="Your minimalist, chronological clippings will appear here..." readonly></textarea>
     
     <button id="downloadBtn" disabled>Download .txt File</button>
@@ -36,6 +45,10 @@
 
 <script>
     let currentFileName = "My Clippings.txt";
+    let currentParsedData = []; // Store parsed data globally to allow live toggling
+
+    // Listen for checkbox changes to update preview live
+    document.getElementById('removeTitleToggle').addEventListener('change', renderOutput);
 
     function formatKindleDate(timestamp) {
         if (!timestamp || isNaN(timestamp)) return "Unknown Date";
@@ -45,13 +58,37 @@
         return `${dateStr} ${timeStr}`;
     }
 
-    // Helper to check if location ranges overlap (e.g., "872-873" and "873")
     function locationsOverlap(loc1, loc2) {
         if (!loc1 || !loc2) return false;
         if (loc1 === loc2) return true;
         const parts1 = loc1.toString().split('-');
         const parts2 = loc2.toString().split('-');
         return parts1.some(p => parts2.includes(p));
+    }
+
+    // Function to build the final text output
+    function renderOutput() {
+        if (!currentParsedData || currentParsedData.length === 0) return;
+        
+        const removeTitles = document.getElementById('removeTitleToggle').checked;
+        let finalOutput = "";
+        
+        currentParsedData.forEach((item, index) => {
+            if (!removeTitles) {
+                finalOutput += `${item.titleAuthor}\n`;
+            }
+            finalOutput += `${item.meta}\n`; 
+            if (item.content) {
+                finalOutput += `${item.content}\n`;
+            }
+            
+            if (index < currentParsedData.length - 1) {
+                finalOutput += `\n`;
+            }
+        });
+        
+        document.getElementById('output').value = finalOutput;
+        document.getElementById('downloadBtn').disabled = false;
     }
 
     document.getElementById('fileInput').addEventListener('change', function(e) {
@@ -70,7 +107,6 @@
 
             try {
                 if (isJson) {
-                    // --- PARSE LIBBY JSON ---
                     const data = JSON.parse(fileContent);
                     const title = data.readingJourney?.title?.text || "Unknown Title";
                     const author = data.readingJourney?.author || "Unknown Author";
@@ -100,9 +136,7 @@
                     }
 
                 } else {
-                    // --- PARSE TXT (KINDLE OR KOREADER) ---
                     if (fileContent.includes("==========")) {
-                        // Standard Kindle TXT Parser
                         const blocks = fileContent.split('==========');
                         blocks.forEach(block => {
                             const lines = block.trim().split('\n').map(l => l.trim());
@@ -120,15 +154,12 @@
 
                             let isNote = meta.includes("- Your Note");
                             let loc = "Unknown";
-                            
-                            // Capture the full location range (e.g., "872-873" instead of just "872")
                             let locMatch = meta.match(/(?:at location|on Chapter:)\s+([^ |]+)/);
                             if (locMatch) loc = locMatch[1];
 
                             parsedItems.push({ titleAuthor, meta, content, timestamp: isNaN(timestamp) ? 0 : timestamp, isNote, loc });
                         });
                     } else {
-                        // KOReader TXT Parser
                         const lines = fileContent.split('\n');
                         
                         let titleAuthor = "Unknown Title";
@@ -190,14 +221,12 @@
                     }
                 }
 
-                // --- SORT & MERGE PHASE ---
                 parsedItems.sort((a, b) => a.timestamp - b.timestamp);
 
                 let mergedItems = [];
                 parsedItems.forEach(item => {
                     if (item.isNote) {
                         let prev = mergedItems[mergedItems.length - 1];
-                        // FIXED: Now properly checks if ranges overlap (e.g., "872-873" overlaps with "873")
                         if (prev && prev.titleAuthor === item.titleAuthor && locationsOverlap(prev.loc, item.loc) && !prev.isNote) {
                             if (item.content) {
                                 prev.content += "\nNote:\n" + item.content;
@@ -208,23 +237,9 @@
                     mergedItems.push(item);
                 });
 
-                // --- FINAL OUTPUT GENERATION ---
-                let finalOutput = "";
-                mergedItems.forEach((item, index) => {
-                    finalOutput += `${item.titleAuthor}\n`;
-                    finalOutput += `${item.meta}\n`; 
-                    if (item.content) {
-                        finalOutput += `${item.content}\n`;
-                    }
-                    
-                    if (index < mergedItems.length - 1) {
-                        finalOutput += `\n`;
-                    }
-                });
-                
                 if (mergedItems.length > 0) {
-                    document.getElementById('output').value = finalOutput;
-                    document.getElementById('downloadBtn').disabled = false;
+                    currentParsedData = mergedItems;
+                    renderOutput(); // Generate the text view
                 } else {
                     alert("No valid clippings found in this file.");
                 }
