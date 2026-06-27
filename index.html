@@ -25,7 +25,7 @@
 
 <div class="container">
     <h1>📚 Universal Clippings Converter <span class="badge">Libby + Kindle + KOReader</span></h1>
-    <p>Upload your <strong>Libby JSON</strong> or <strong>Kindle/KOReader TXT</strong> file. The tool automatically merges overlapping notes, standardizes dates, and outputs a minimalist format.</p>
+    <p>Upload your <strong>Libby JSON</strong> or <strong>Kindle/KOReader/Clean TXT</strong> file. The tool automatically merges overlapping notes, standardizes dates, and outputs a minimalist format.</p>
     
     <div class="upload-area">
         <input type="file" id="fileInput" accept=".json, .txt">
@@ -45,9 +45,8 @@
 
 <script>
     let currentFileName = "My Clippings.txt";
-    let currentParsedData = []; // Store parsed data globally to allow live toggling
+    let currentParsedData = []; 
 
-    // Listen for checkbox changes to update preview live
     document.getElementById('removeTitleToggle').addEventListener('change', renderOutput);
 
     function formatKindleDate(timestamp) {
@@ -66,7 +65,6 @@
         return parts1.some(p => parts2.includes(p));
     }
 
-    // Function to build the final text output
     function renderOutput() {
         if (!currentParsedData || currentParsedData.length === 0) return;
         
@@ -137,6 +135,7 @@
 
                 } else {
                     if (fileContent.includes("==========")) {
+                        // 1. Classic Kindle Parser
                         const blocks = fileContent.split('==========');
                         blocks.forEach(block => {
                             const lines = block.trim().split('\n').map(l => l.trim());
@@ -159,19 +158,15 @@
 
                             parsedItems.push({ titleAuthor, meta, content, timestamp: isNaN(timestamp) ? 0 : timestamp, isNote, loc });
                         });
-                    } else {
+                    } else if (/^\d+\.\s+Highlight/m.test(fileContent)) {
+                        // 2. KOReader Parser
                         const lines = fileContent.split('\n');
-                        
                         let titleAuthor = "Unknown Title";
                         for (let l of lines) {
-                            if (l.trim()) {
-                                titleAuthor = l.trim();
-                                break;
-                            }
+                            if (l.trim()) { titleAuthor = l.trim(); break; }
                         }
 
                         let currentChapter = "Unknown";
-                        
                         for (let i = 0; i < lines.length; i++) {
                             let line = lines[i].trim();
                             if (!line) continue;
@@ -182,7 +177,6 @@
                                 let match = line.match(/^\d+\.\s+Highlight\s+-\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})(.*)/);
                                 let dateStr = match ? match[1] : "";
                                 let restOfLine = match ? match[2] : "";
-
                                 let content = restOfLine.trim();
                                 let j = i + 1;
                                 
@@ -199,25 +193,53 @@
                                     note = noteMatch[1].trim();
                                     quote = content.substring(0, noteMatch.index).trim();
                                 }
-                                
                                 if (note.toLowerCase() === "no notes") note = "";
 
                                 let timestamp = dateStr ? new Date(dateStr.replace(" ", "T")).getTime() : 0;
                                 let meta = `- Your Highlight on Chapter: ${currentChapter} | Added on ${formatKindleDate(timestamp)}`;
-                                
                                 let finalContent = quote;
                                 if (note) finalContent += (finalContent ? "\nNote:\n" : "Note:\n") + note;
 
-                                parsedItems.push({
-                                    titleAuthor: titleAuthor,
-                                    meta: meta,
-                                    content: finalContent.trim(),
-                                    timestamp: timestamp,
-                                    isNote: false,
-                                    loc: currentChapter
-                                });
+                                parsedItems.push({ titleAuthor, meta, content: finalContent.trim(), timestamp, isNote: false, loc: currentChapter });
                             }
                         }
+                    } else {
+                        // 3. Clean TXT Parser (Reads its own generated files)
+                        const lines = fileContent.split('\n');
+                        let currentItem = null;
+                        
+                        for (let i = 0; i < lines.length; i++) {
+                            let line = lines[i].trim();
+                            if (!line) continue;
+                            
+                            // Check if the next line exists and is the Meta line
+                            if (i + 1 < lines.length && lines[i+1].trim().startsWith("- Your ")) {
+                                if (currentItem) parsedItems.push(currentItem);
+                                
+                                let meta = lines[i+1].trim();
+                                let timestamp = 0;
+                                let dateMatch = meta.split('| Added on ');
+                                if (dateMatch.length > 1) timestamp = new Date(dateMatch[1]).getTime();
+                                
+                                let isNote = meta.includes("- Your Note");
+                                let loc = "Unknown";
+                                let locMatch = meta.match(/(?:at location|on Chapter:)\s+([^ |]+)/);
+                                if (locMatch) loc = locMatch[1];
+                                
+                                currentItem = {
+                                    titleAuthor: line,
+                                    meta: meta,
+                                    content: "",
+                                    timestamp: isNaN(timestamp) ? 0 : timestamp,
+                                    isNote: isNote,
+                                    loc: loc
+                                };
+                                i++; // Skip the meta line since we just processed it
+                            } else if (currentItem) {
+                                currentItem.content += (currentItem.content ? "\n" : "") + line;
+                            }
+                        }
+                        if (currentItem) parsedItems.push(currentItem);
                     }
                 }
 
@@ -239,7 +261,7 @@
 
                 if (mergedItems.length > 0) {
                     currentParsedData = mergedItems;
-                    renderOutput(); // Generate the text view
+                    renderOutput(); 
                 } else {
                     alert("No valid clippings found in this file.");
                 }
